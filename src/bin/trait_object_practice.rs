@@ -51,3 +51,7 @@ pub fn trait_object() {
         x.add()
     }
 }
+
+fn main() {
+    trait_object();
+}
