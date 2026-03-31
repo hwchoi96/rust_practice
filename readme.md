@@ -65,3 +65,67 @@
 **실행**
 
 - `cargo run --bin thread_concurrency_1`
+
+**`thread_concurrency_3.rs` (Mutex / RwLock 데모·벤치)**
+
+**실행**
+
+- `cargo run --bin thread_concurrency_3 -- demo` — 쓰기 스레드만 10×1000회, 합계 **10000** 정합성 확인 (슬립 없음).
+- `cargo run --release --bin thread_concurrency_3 -- bench` — 아래 시나리오 순으로 벤치마크 (**release 권장**).
+
+**벤치가 하는 일**
+
+- 공유 자원 `Element { data: i32 }`에 대해 `Arc<Mutex<_>>` vs `Arc<RwLock<_>>` 로 **같은 패턴의 작업**을 수행하고, **전체 스레드 `join`까지 걸린 wall-clock**을 잰다.
+- **fat_read**: 락을 잡은 뒤 `data`를 `read_inner_loops`번 더 읽는다 (`std::hint::black_box`로 최적화 방지). 이 구간에서 `Mutex`는 읽기가 **직렬**이고, `RwLock`은 읽기 락을 **동시에** 잡을 수 있어 병렬에 가깝게 동작할 수 있다.
+- 시나리오마다 워밍업 1회 후, Mutex / RwLock 각각 **7회** 측정해 **min / median / avg**를 출력한다.
+
+**시나리오 (코드 `scenarios()`와 동일)**
+
+| 순서 | 이름 | 요지 |
+|------|------|------|
+| ① | `READ_ONLY + fat_read` | 쓰기 스레드 **0**. 읽기만 많고 `read_inner_loops`는 **1024**. Mutex는 읽기만 전부 직렬, RwLock은 읽기만 병렬 → **RwLock이 구조상 가장 유리하기 쉬움**. |
+| ② | `read_heavy + fat_read` | 읽기 스레드 많음, 쓰기 적음. `read_inner_loops` 기본(512). |
+| ③ | `balanced + fat_read` | 읽기·쓰기 스레드 수 균형. fat_read. |
+| ④ | `write_heavy + thin_read` | 읽기 적음, 쓰기 많음. **`read_inner_loops = 1`** (얇은 읽기)로 쓰기 경합이 두드러지게 → **`Mutex`가 유리하기 쉬운** 후보. |
+
+①~③은 바깥 **읽기 루프 총합**과(①은 쓰기 0) ②③④는 **총 쓰기 횟수**를 맞추도록 상수가 잡혀 있다 (`TOTAL_READS_PER_RUN`, `TOTAL_WRITES_PER_RUN` 등).
+
+**출력 해석 (대표 패턴)**
+
+- **①~③**: 같은 총 읽기·쓰기 부하에서 **median 기준 RwLock이 더 빠르게** 나오는 경우가 많다. (읽기 병렬 + fat 구간)
+- **④**: **median 기준 Mutex가 더 빠르게** 나오는 경우가 많다. (락 획득이 가볍고 쓰기가 잦을 때 RwLock 오버헤드만 커지기 쉬움)
+- **절대 시간**(초·ms)은 CPU·코어 수·OS·전원 설정에 따라 크게 달라진다. **같은 기기에서 Mutex vs RwLock 상대 비교**가 목적이다.
+
+**예시 (한 환경에서 측정한 결과 — 숫자는 참고용)**
+
+아래는 특정 머신에서 `--release`로 돌렸을 때의 **대략적인 비율**이다. 재현 시 위·아래 순서와 승자 패턴만 비슷하면 된다.
+
+- **① READ_ONLY + fat_read**: Mutex 전체 시간이 RwLock보다 **수 배 ~ 한 자릿수 배** 길게 나오는 경우가 많다.
+- **② read_heavy / ③ balanced**: Mutex가 **수 초대**, RwLock이 **1초 미만~1초대**처럼 **RwLock이 짧게** 나오는 패턴이 흔하다.
+- **④ write_heavy + thin_read**: Mutex가 **수십 ms**, RwLock이 **100ms 안팎**처럼 **Mutex가 짧게** 나오는 패턴이 흔하다.
+
+출력 마지막 줄의 `→ 더 빠른 쪽 — median: … | min: …` 로 시나리오별 승자를 바로 볼 수 있다.
+
+아래는 벤치마크 테스트 결과.
+
+```
+── READ_ONLY + fat_read (RwLock이 이기기 쉬운 구조) ──
+Mutex  min/median/avg: 9.445657917s / 9.564503417s / 9.582837952s  final_data=0 (쓰기 합계 기대 0)
+RwLock min/median/avg: 1.606396542s / 1.621629125s / 1.634122821s  final_data=0 (쓰기 합계 기대 0)
+→ 더 빠른 쪽 — median: RwLock | min: RwLock
+
+── read_heavy + fat_read (RwLock 유리 후보) ──
+Mutex  min/median/avg: 5.337699042s / 5.353763084s / 5.367723446s  final_data=20000 (쓰기 합계 기대 20000)
+RwLock min/median/avg: 905.767958ms / 919.426334ms / 921.276428ms  final_data=20000 (쓰기 합계 기대 20000)
+→ 더 빠른 쪽 — median: RwLock | min: RwLock
+
+── balanced + fat_read ──
+Mutex  min/median/avg: 5.342283042s / 5.365264209s / 5.373380577s  final_data=20000 (쓰기 합계 기대 20000)
+RwLock min/median/avg: 903.47675ms / 937.441958ms / 940.714231ms  final_data=20000 (쓰기 합계 기대 20000)
+→ 더 빠른 쪽 — median: RwLock | min: RwLock
+
+── write_heavy + thin_read (Mutex 유리 후보) ──
+Mutex  min/median/avg: 67.21075ms / 76.205375ms / 75.366708ms  final_data=20000 (쓰기 합계 기대 20000)
+RwLock min/median/avg: 102.469833ms / 111.72725ms / 110.271047ms  final_data=20000 (쓰기 합계 기대 20000)
+→ 더 빠른 쪽 — median: Mutex | min: Mutex
+```
