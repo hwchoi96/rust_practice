@@ -8,6 +8,9 @@ use tokio_tungstenite::tungstenite::{Message};
 
 /// 웹소켓 server side
 
+/// 30초 동안 아무 수신도 없으면 유휴 타임아웃 (다음 `next()`까지 대기 시간)
+const IDLE_TIMEOUT: Duration = Duration::from_secs(10);
+
 #[derive(Serialize, Deserialize)]
 struct WelcomeMessage {
     msg: String
@@ -61,9 +64,6 @@ pub async fn handle_connection(
     // 클라이언트에게 첫 메시지 전송 — `?`는 이 함수가 `Result`를 반환할 때만 사용 가능.
     let json = serde_json::to_string(&welcome_msg)?;
     ws_sender.send(Message::Text(json)).await?;
-
-    /// 30초 동안 아무 수신도 없으면 유휴 타임아웃 (다음 `next()`까지 대기 시간)
-    const IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 
     loop {
         match timeout(IDLE_TIMEOUT, ws_receiver.next()).await {
