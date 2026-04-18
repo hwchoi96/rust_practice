@@ -99,6 +99,7 @@ dependencies = [
  "crossbeam-epoch",
  "futures-util",
  "http",
+ "log",
  "rand",
  "rust_decimal",
  "serde",
