@@ -1,6 +1,7 @@
 use std::sync::Arc;
 /// lock-free Swap 멀티 스레드 환경에서 못 쓰는 버전.
 /// Mutex 등의 임계 영역 설정이 없기 때문에, 쓰기 스레드가 데이터 변경 후 메모리 해제하면 UB 발생 가능.
+/// 데이터를 안전하게 처리하려면, AtomicSwap, epoch 등 추가 구현체 사용 필요.
 
 use std::sync::atomic::{AtomicPtr, Ordering};
 
