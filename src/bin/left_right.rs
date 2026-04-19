@@ -10,7 +10,7 @@ struct LeftRight<T> {
 
 impl<T> LeftRight<T>
 where
-    T: Clone + Send,
+    T: Clone + Send, // Send = 타 스레드에 해당 값을 넘겨도 문제가 없음을 의미하는 클로저
 {
     pub fn new(element: T) -> LeftRight<T> {
 
