@@ -4,8 +4,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// left-right 기반 데이터 교체 방법 1
 /// > 쓰기 행위에는 비활성화된 인덱스에 배타락을 걸어서 안전하게 교체.
 
-/// todo: 교체 방법 2안은 write 행위에 대한 epoch 으로 대체하여, 완벽한 lock-free 지원 예정.
-
 struct SimpleLeftRight<T> {
 
     active_index: AtomicUsize,
